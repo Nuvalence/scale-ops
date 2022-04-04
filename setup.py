@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from pathlib import Path
 
 from setuptools import setup, find_packages
 import setuptools
@@ -7,7 +8,8 @@ if __name__ == "__main__":
     setuptools.setup()
 
 with open("README.md", "r") as f:
-    long_description = f.read()
+    cur_dir = Path(__file__).parent
+    long_description = (cur_dir / "README.md").read_text()
 
 setup(
         name='scaleops',
