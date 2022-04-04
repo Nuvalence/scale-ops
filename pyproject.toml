@@ -1,3 +1,12 @@
 [build-system]
-requires = ["setuptools>=58"]
+requires = [
+    "setuptools>=58",
+    "setuptools[toml]",
+    "setuptools_scm_git_archive",
+    "wheel"
+]
 build-backend = "setuptools.build_meta"
+
+[tools.setuptools_scm]
+write_to = 'scaleops/version.py'
+git_describe_command = 'git describe --dirty --tags --long --match v* --first-parent'
