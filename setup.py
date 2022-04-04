@@ -7,9 +7,8 @@ import setuptools
 if __name__ == "__main__":
     setuptools.setup()
 
-with open("README.md", "r") as f:
-    cur_dir = Path(__file__).parent
-    long_description = (cur_dir / "README.md").read_text()
+cur_dir = Path(__file__).parent
+long_description = (cur_dir / "README.md").read_text()
 
 setup(
         name='scaleops',
