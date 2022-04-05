@@ -57,7 +57,7 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
         axs[0, i].plot(metric_results[i].iloc[:, [0]])
         axs[0, i].set_title(metric_results[i].iloc[:, [0]].columns[0])
         axs[1, i].plot(metric_results[i].iloc[:, [1]])
-        axs[1, i].set_title(metric_results[i].iloc[:, [1]].columns[1])
+        axs[1, i].set_title(metric_results[i].iloc[:, [1]].columns[0])
         axs[2, i].plot(metric_results[i])
         axs[2, i].set_title(s.pod_part)
 
