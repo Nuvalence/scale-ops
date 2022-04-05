@@ -32,18 +32,19 @@ class Scenario:
         self.step = step
 
 
-def cv_rmsd(x, y):
+def cv_rmsd(x: np.ndarray, y: np.ndarray):
     diff = np.array(x) - np.array(y)
     n = len(x)
     return np.sqrt((diff * diff).sum() / n)
 
 
-def cv(x):
+def cv(x: np.ndarray):
     return np.std(x) / np.nanmean(x)
 
 
-def plot_line_ab(metric_name: str, axis_name: str, metric_result_a: pd.DataFrame,
-            metric_result_b: pd.DataFrame):
+def plot_line_ab(metric_name: str, axis_name: str,
+                 metric_result_a: pd.DataFrame,
+                 metric_result_b: pd.DataFrame):
     fig, axs = plt.subplots(3, 2, figsize=(18, 18), sharey='row')
     axs[0, 0].plot(metric_result_a.iloc[:, [0]])
     axs[0, 0].set_title(metric_result_a.iloc[:, [0]].columns[0])
@@ -63,8 +64,10 @@ def plot_line_ab(metric_name: str, axis_name: str, metric_result_a: pd.DataFrame
         ax.label_outer()
 
 
-def plot_cm_ab(metric_name: str, name_a: str, name_b: str, metric_result_a: pd.DataFrame,
-            metric_result_b: pd.DataFrame, display_cm: bool = False, display_cv: bool = True):
+def plot_cm_ab(metric_name: str, name_a: str, name_b: str,
+               metric_result_a: pd.DataFrame,
+               metric_result_b: pd.DataFrame, display_cm: bool = False,
+               display_cv: bool = True):
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
 
     cm_a = metric_result_a.corr(method=cv_rmsd)
@@ -78,10 +81,12 @@ def plot_cm_ab(metric_name: str, name_a: str, name_b: str, metric_result_a: pd.D
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 12), sharex='all', sharey='all')
     cbar_ax = fig.add_axes([.91, .3, .03, .4])
-    sns.heatmap(cm_a, mask=mask_a, cmap=cmap, cbar=0, cbar_ax=None, ax=axs[0], xticklabels=False,
+    sns.heatmap(cm_a, mask=mask_a, cmap=cmap, cbar=0, cbar_ax=None, ax=axs[0],
+                xticklabels=False,
                 yticklabels=False)
     axs[0].set_title(f'{name_a} Correlation CV(RMSD): {metric_name}')
-    sns.heatmap(cm_b, mask=mask_b, cmap=cmap, cbar=1, cbar_ax=cbar_ax, ax=axs[1], xticklabels=False,
+    sns.heatmap(cm_b, mask=mask_b, cmap=cmap, cbar=1, cbar_ax=cbar_ax,
+                ax=axs[1], xticklabels=False,
                 yticklabels=False)
     axs[1].set_title(f'{name_b} Correlation CV(RMSD): {metric_name}')
 
@@ -94,3 +99,12 @@ def plot_cm_ab(metric_name: str, name_a: str, name_b: str, metric_result_a: pd.D
         display(f'CV: {metric_name} {name_a}: {cv_a}')
         display(f'CV: {metric_name} {name_b}: {cv_b}')
         display(f'CV(RMSD): {metric_name} {name_a} vs {name_b}: {cv_a_to_b}')
+
+
+def scorecard(scenarios: list[Scenario], metric_results: list[pd.DataFrame]) -> pd.DataFrame:
+    return pd.concat(
+            [m.groupby(['metric_name'], axis=1).sum().agg(cv) for m in metric_results],
+            axis=1,
+            names=['scenario_name'],
+            keys=[s.pod_part for s in scenarios]
+    )
