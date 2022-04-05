@@ -68,12 +68,12 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
         ax.label_outer()
 
 
-def plot_cm_ab(metric_name: str,
-               scenarios: list[Scenario],
-               metric_results: list[pd.DataFrame],
-               display_cm: bool = False,
-               display_cv: bool = True,
-               figsize: Tuple[int, int] = None):
+def plot_cm_scenarios(metric_name: str,
+                      scenarios: list[Scenario],
+                      metric_results: list[pd.DataFrame],
+                      display_cm: bool = False,
+                      display_cv: bool = True,
+                      figsize: Tuple[int, int] = None):
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
     col_count = len(scenarios)
 
