@@ -101,9 +101,11 @@ def plot_cm_ab(metric_name: str, name_a: str, name_b: str,
         display(f'CV(RMSD): {metric_name} {name_a} vs {name_b}: {cv_a_to_b}')
 
 
-def scorecard(scenarios: list[Scenario], metric_results: list[pd.DataFrame]) -> pd.DataFrame:
+def scorecard(scenarios: list[Scenario],
+              metric_results: list[pd.DataFrame]) -> pd.DataFrame:
     return pd.concat(
-            [m.groupby(['metric_name'], axis=1).sum().agg(cv) for m in metric_results],
+            [m.groupby(['metric_name'], axis=1).sum().agg(cv) for m in
+             metric_results],
             axis=1,
             names=['scenario_name'],
             keys=[s.pod_part for s in scenarios]
