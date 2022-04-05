@@ -50,7 +50,7 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
     fig, axs = plt.subplots(
             3,
             col_count,
-            figsize=(18, 18),
+            figsize=(12.8, 9.6),
             sharey='row'
     )
     for i, s in enumerate(scenarios):
@@ -84,6 +84,7 @@ def plot_cm_scenarios(metric_name: str,
             sharex='all',
             sharey='all'
     )
+    cbar_ax = fig.add_axes([.91, .3, .03, .4])
 
     for i, s in enumerate(scenarios):
         cm = metric_results[i].corr(method=cv_rmsd)
@@ -92,11 +93,10 @@ def plot_cm_scenarios(metric_name: str,
         if display_cm:
             display(cm)
 
-        cbar_ax = fig.add_axes([.91, .3, .03, .4])
         sns.heatmap(cm,
                     mask=mask,
                     cmap=cmap,
-                    cbar=0,
+                    cbar=0 if (col_count < i - 1) else 1,
                     cbar_ax=None if (col_count < i - 1) else cbar_ax,
                     ax=axs[i],
                     xticklabels=False,
