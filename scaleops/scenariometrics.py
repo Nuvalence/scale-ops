@@ -208,7 +208,7 @@ sum(container_spec_cpu_quota{{
 
 
 class NodeScenarioMetricsMixin(ScenarioMetrics):
-    def node_cpu_utilization(self, scenario: Scenario) -> Matrix:
+    def node_cpu_utilization(self, scenario: Scenario) -> list[MetricResult]:
         node_cpu_seconds_total_q = "rate(node_cpu_seconds_total[1m])"
         return [MetricResult(node_cpu_seconds_total_q, self._query_range(
                 node_cpu_seconds_total_q,
