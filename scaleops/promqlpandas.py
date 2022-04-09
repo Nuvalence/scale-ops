@@ -30,9 +30,7 @@ class Prometheus:
 
     def __init__(self,
                  api_url: str,
-                 headers: dict = None,
-                 query_path: str = 'api/v1/',
-                 query_token: str = 'query'):
+                 headers: dict = None):
         """
         Create a Prometheus Client.
         :param api_url: The URL to the Prometheus API endpoint.
