@@ -1,6 +1,11 @@
 import datetime
+import hashlib
 import logging
+import os
+import pathlib
 import re
+import shutil
+from os.path import exists
 from typing import Any
 from typing import Callable
 from typing import Optional
@@ -30,7 +35,8 @@ class Prometheus:
 
     def __init__(self,
                  api_url: str,
-                 headers: dict = None):
+                 headers: dict = None,
+                 cache_path: pathlib.Path = None):
         """
         Create a Prometheus Client.
         :param api_url: The URL to the Prometheus API endpoint.
@@ -40,12 +46,22 @@ class Prometheus:
         self.api_url = api_url
         self.headers = headers
         self._http = requests.Session()
+        self._cache_path = cache_path
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._http.close()
+
+    def flush_cache(self) -> None:
+        shutil.rmtree(self._cache_path, ignore_errors=True)
+
+    def flush_query_cache(self, query: str) -> None:
+        # used for generating filenames for cache
+        # noinspection InsecureHash
+        query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()
+        os.remove(self._cache_path / f'{query_hash}.parquet')
 
     def query(self,
               query: str,
@@ -69,10 +85,10 @@ class Prometheus:
         params = {'query': query}
 
         if time is not None:
-            params['time'] = _timestamp(time)
+            params['time'] = to_ts(time)
 
         if timeout is not None:
-            params['timeout'] = _duration_to_s(timeout)
+            params['timeout'] = duration_to_s(timeout)
 
         results = self._do_query('api/v1/query', params)
         logger.debug(f'Received {len(results)} metrics')
@@ -102,20 +118,43 @@ class Prometheus:
         :param timeout: Evaluation timeout. Optional.
         :param sort: A function passed that generates a sort from a metric dictionary. Optional.
         """
-        epoch_start = _timestamp(start)
-        epoch_end = _timestamp(end)
-        step_seconds = _duration_to_s(step)
+        epoch_start = to_ts(start)
+        epoch_end = to_ts(end)
+        step_seconds = duration_to_s(step)
         params = {'query': query, 'start': epoch_start, 'end': epoch_end,
                   'step': step_seconds}
 
         if timeout is not None:
-            params['timeout'] = _duration_to_s(timeout)
+            params['timeout'] = duration_to_s(timeout)
 
+        # used for generating filenames for cache
+        # noinspection InsecureHash
+        query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()
+
+        # don't use a cache if no path is set
+        if self._cache_path:
+            # if the cache_path was configured, look there first
+            if exists(self._cache_path):
+                if exists(self._cache_path / f'{query_hash}.parquet'):
+                    return pd.read_parquet(self._cache_path / f'{query_hash}.parquet')
+            else:
+                os.makedirs(self._cache_path)
+
+        # get the data
         results = self._do_query('api/v1/query_range', params)
+        metric_df = self._to_pandas(
+                results,
+                epoch_start,
+                epoch_end,
+                step_seconds,
+                sort,
+                labels)
         logger.debug(f'Received {len(results)} metrics')
 
-        return self._to_pandas(results, epoch_start, epoch_end, step_seconds,
-                               sort, labels)
+        # make sure to write it if we're caching
+        if self._cache_path:
+            metric_df.to_parquet(self._cache_path / f'{query_hash}.parquet')
+        return metric_df
 
     def _do_query(self, path: str, params: dict) -> dict:
         resp = self._http.get(urljoin(self.api_url, path), headers=self.headers,
@@ -257,12 +296,12 @@ def _merge_metric_labels(metrics: list, labels: dict) -> list:
     return metrics
 
 
-def _timestamp(dt: Timestamp):
+def to_ts(ts: Timestamp):
     """Convert a datetime or float to a UNIX timestamp.
 
     Parameters
     ----------
-    dt
+    ts
         If float assume it's already a UNIX timestamp, otherwise convert a
         datetime according to the usual Python rules.
 
@@ -271,19 +310,19 @@ def _timestamp(dt: Timestamp):
     timestamp
         UNIX timestamp.
     """
-    if not isinstance(dt, (str, float, datetime.datetime)):
-        raise TypeError(f'dt must be a float or datetime. Got {type(dt)}')
+    if not isinstance(ts, (str, float, datetime.datetime)):
+        raise TypeError(f'dt must be a float or datetime. Got {type(ts)}')
 
-    if isinstance(dt, float):
-        return dt
+    if isinstance(ts, float):
+        return ts
 
-    if isinstance(dt, str):
-        return dtparser.parse(dt).timestamp()
+    if isinstance(ts, str):
+        return dtparser.parse(ts).timestamp()
 
-    return dt.timestamp()
+    return ts.timestamp()
 
 
-def _duration_to_s(duration: Duration) -> float:
+def duration_to_s(duration: Duration) -> float:
     """Convert a Prometheus duration string to an interval in s.
 
     Parameters
@@ -330,3 +369,7 @@ def _duration_to_s(duration: Duration) -> float:
         seconds += int(num) * duration_codes[code]
 
     return seconds
+
+
+def ts_to_ms(ts: Timestamp):
+    return int(round(to_ts(ts) * 1000))

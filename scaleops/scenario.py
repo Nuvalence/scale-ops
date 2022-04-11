@@ -2,6 +2,7 @@ import datetime
 from typing import Tuple, Union
 
 import numpy as np
+import pyarrow as pa
 import pandas as pd
 import seaborn as sns
 from IPython.display import display
