@@ -153,7 +153,10 @@ class Prometheus:
 
         # make sure to write it if we're caching
         if self._cache_path:
-            metric_df.to_parquet(self._cache_path / f'{query_hash}.parquet')
+            metric_df.to_parquet(
+                    self._cache_path / f'{query_hash}.parquet',
+                    use_deprecated_int96_timestamps=True
+            )
         return metric_df
 
     def _do_query(self, path: str, params: dict) -> dict:
