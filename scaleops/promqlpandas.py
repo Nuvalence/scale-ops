@@ -90,13 +90,34 @@ class Prometheus:
         if timeout is not None:
             params['timeout'] = duration_to_s(timeout)
 
+        # used for generating filenames for cache
+        # noinspection InsecureHash
+        query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()
+
+        # don't use a cache if no path is set
+        if self._cache_path:
+            # if the cache_path was configured, look there first
+            if exists(self._cache_path):
+                if exists(self._cache_path / f'{query_hash}.parquet'):
+                    return pd.read_parquet(
+                        self._cache_path / f'{query_hash}.parquet')
+            else:
+                os.makedirs(self._cache_path)
+
         results = self._do_query('api/v1/query', params)
         logger.debug(f'Received {len(results)} metrics')
 
         if sort:
             results = sorted(results, key=lambda r: sort(r['metric']))
 
-        return self._to_pandas(results)
+        metric_df = self._to_pandas(results)
+        # make sure to write it if we're caching
+        if self._cache_path:
+            metric_df.to_parquet(
+                    self._cache_path / f'{query_hash}.parquet',
+                    use_deprecated_int96_timestamps=True
+            )
+        return metric_df
 
     def query_range(self,
                     query: str,
@@ -136,7 +157,8 @@ class Prometheus:
             # if the cache_path was configured, look there first
             if exists(self._cache_path):
                 if exists(self._cache_path / f'{query_hash}.parquet'):
-                    return pd.read_parquet(self._cache_path / f'{query_hash}.parquet')
+                    return pd.read_parquet(
+                        self._cache_path / f'{query_hash}.parquet')
             else:
                 os.makedirs(self._cache_path)
 
