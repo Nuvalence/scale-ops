@@ -106,7 +106,7 @@ class Prometheus:
                     labels: Optional[dict] = None,
                     timeout: Optional[Duration] = None,
                     sort: Optional[Callable[[dict], Any]] = None,
-                    flush_cache: bool = False) -> Matrix:
+                    flush_cache: Optional[bool] = False) -> Matrix:
         """
         Evaluates an expression query over a range of time.
 

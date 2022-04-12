@@ -1,8 +1,7 @@
 import datetime
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
-import pyarrow as pa
 import pandas as pd
 import seaborn as sns
 from IPython.display import display
@@ -47,8 +46,8 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
                         scenarios: list[Scenario],
                         metric_results: list[pd.DataFrame],
                         figsize: Tuple[int, int] = None,
-                        display_total: bool = False,
-                        annotate_total: bool = False):
+                        display_total: Optional[bool] = False,
+                        annotate_total: Optional[bool] = False):
     col_count = len(scenarios)
     fig, axs = plt.subplots(
             3,
@@ -95,9 +94,9 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
 def plot_cm_scenarios(metric_name: str,
                       scenarios: list[Scenario],
                       metric_results: list[pd.DataFrame],
-                      display_cm: bool = False,
-                      display_cv: bool = True,
-                      figsize: Tuple[int, int] = None):
+                      display_cm: Optional[bool] = False,
+                      display_cv: Optional[bool] = True,
+                      figsize: Optional[Tuple[int, int]] = None):
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
     col_count = len(scenarios)
 
