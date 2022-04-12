@@ -105,7 +105,8 @@ class Prometheus:
                     step: Duration,
                     labels: Optional[dict] = None,
                     timeout: Optional[Duration] = None,
-                    sort: Optional[Callable[[dict], Any]] = None) -> Matrix:
+                    sort: Optional[Callable[[dict], Any]] = None,
+                    flush_cache: bool = False) -> Matrix:
         """
         Evaluates an expression query over a range of time.
 
@@ -133,6 +134,9 @@ class Prometheus:
 
         # don't use a cache if no path is set
         if self._cache_path:
+            # if the cache_path was configured, and flush_cache is True
+            if flush_cache:
+                self.flush_query_cache(query)
             # if the cache_path was configured, look there first
             if exists(self._cache_path):
                 if exists(self._cache_path / f'{query_hash}.parquet'):
