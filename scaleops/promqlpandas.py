@@ -115,7 +115,6 @@ class Prometheus:
         if self._cache_path:
             metric_df.to_parquet(
                     self._cache_path / f'{query_hash}.parquet',
-                    index=True,
                     use_deprecated_int96_timestamps=True
             )
         return metric_df
@@ -178,7 +177,6 @@ class Prometheus:
         if self._cache_path:
             metric_df.to_parquet(
                     self._cache_path / f'{query_hash}.parquet',
-                    index=True,
                     use_deprecated_int96_timestamps=True
             )
         return metric_df
