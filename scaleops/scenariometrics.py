@@ -1,9 +1,5 @@
 import datetime
-import hashlib
-import os
-import pathlib
-import shutil
-from typing import Union
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -37,7 +33,7 @@ class ScenarioMetrics:
         self.prometheus = prometheus
 
     def _query_range(self, query: str, scenario: Scenario,
-                     labels: dict = None, flush_cache: bool = False) -> Matrix:
+                     labels: Dict = None, flush_cache: bool = False) -> Matrix:
         return self.prometheus.query_range(query, scenario.start,
                                            scenario.end,
                                            scenario.step,
@@ -48,7 +44,7 @@ class ScenarioMetrics:
 class PrometheusMetricsMixin(ScenarioMetrics):
 
     def scrape_duration(self, scenario: Scenario, flush_cache: bool = False) -> \
-            list[MetricResult]:
+            List[MetricResult]:
         scrape_duration_q = f"""scrape_duration_seconds{{
     kubernetes_pod_name=~".*{scenario.pod_part}.*"
 }}"""
@@ -60,7 +56,7 @@ class PrometheusMetricsMixin(ScenarioMetrics):
 class JvmScenarioMetricsMixin(ScenarioMetrics):
 
     def jvm_threads(self, scenario: Scenario, flush_cache: bool = False) -> \
-            list[MetricResult]:
+            List[MetricResult]:
         jvm_threads_current_q = f"""jvm_threads_current{{
     kubernetes_pod_name=~".*{scenario.pod_part}.*"
 }} > 0"""
@@ -69,7 +65,7 @@ class JvmScenarioMetricsMixin(ScenarioMetrics):
                                                scenario,
                                                flush_cache=flush_cache))]
 
-    def jvm_memory(self, scenario: Scenario, flush_cache: bool = False) -> list[
+    def jvm_memory(self, scenario: Scenario, flush_cache: bool = False) -> List[
         MetricResult]:
         jvm_mem_bytes_committed_q = f"""jvm_memory_bytes_committed{{
     kubernetes_pod_name=~".*{scenario.pod_part}.*"
@@ -106,7 +102,7 @@ class JvmScenarioMetricsMixin(ScenarioMetrics):
                 MetricResult(jvm_mem_pool_bytes_used_q,
                              jvm_mem_pool_bytes_used_df)]
 
-    def jvm_gc(self, scenario: Scenario, flush_cache: bool = False) -> list[
+    def jvm_gc(self, scenario: Scenario, flush_cache: bool = False) -> List[
         MetricResult]:
         jvm_gc_collection_seconds_sum_q = f"""rate(jvm_gc_collection_seconds_sum{{
     kubernetes_pod_name=~".*{scenario.pod_part}.*"
@@ -138,14 +134,14 @@ class JvmScenarioMetricsMixin(ScenarioMetrics):
 class ContainerScenarioMetricsMixin(ScenarioMetrics):
 
     def cluster_size(self, scenario: Scenario, flush_cache: bool = False) -> \
-            list[MetricResult]:
+            List[MetricResult]:
         kube_container_info_q = f'kube_pod_container_info{{pod=~".*{scenario.pod_part}.*"}}'
         return [MetricResult(kube_container_info_q,
                              self.prometheus.query(kube_container_info_q,
                                                    time=scenario.end))]
 
     def container_cpu_utilization(self, scenario: Scenario,
-                                  flush_cache: bool = False) -> list[
+                                  flush_cache: bool = False) -> List[
         MetricResult]:
         container_cpu_usage_seconds_total_q = f"""sum(rate(container_cpu_usage_seconds_total{{
     pod=~".*{scenario.pod_part}.*",
@@ -167,7 +163,7 @@ sum(container_spec_cpu_quota{{
                                      flush_cache=flush_cache
                              ))]
 
-    def disk_bytes(self, scenario, flush_cache: bool = False) -> list[
+    def disk_bytes(self, scenario, flush_cache: bool = False) -> List[
         MetricResult]:
         container_fs_read_bytes_total_q = f"""rate(container_fs_reads_bytes_total{{
     pod=~".*{scenario.pod_part}.*"
@@ -194,7 +190,7 @@ sum(container_spec_cpu_quota{{
             MetricResult(container_fs_write_bytes_total_q,
                          disk_bytes_writes_df)]
 
-    def disk_io(self, scenario: Scenario, flush_cache: bool = False) -> list[
+    def disk_io(self, scenario: Scenario, flush_cache: bool = False) -> List[
         MetricResult]:
         container_fs_reads_total_q = f"""rate(container_fs_reads_total{{
     pod=~".*{scenario.pod_part}.*",
@@ -221,7 +217,7 @@ sum(container_spec_cpu_quota{{
                 MetricResult(container_fs_writes_total_q, disk_io_writes)]
 
     def network_bytes(self, scenario: Scenario, flush_cache: bool = False) -> \
-            list[MetricResult]:
+            List[MetricResult]:
         container_network_receive_bytes_total_q = f"""rate(container_network_receive_bytes_total{{
     pod=~".*{scenario.pod_part}.*"
 }}[1m])"""
@@ -250,7 +246,7 @@ sum(container_spec_cpu_quota{{
 
 class NodeScenarioMetricsMixin(ScenarioMetrics):
     def node_cpu_utilization(self, scenario: Scenario,
-                             flush_cache: bool = False) -> list[MetricResult]:
+                             flush_cache: bool = False) -> List[MetricResult]:
         node_cpu_seconds_total_q = "rate(node_cpu_seconds_total[1m])"
         return [MetricResult(node_cpu_seconds_total_q, self._query_range(
                 node_cpu_seconds_total_q,

@@ -9,7 +9,7 @@ from scaleops.promqlpandas import Prometheus
 
 class TestPrometheus(TestCase):
     def setUp(self) -> None:
-        self._p = Prometheus('http://demo.robustperception.io:9090/')
+        self._p = Prometheus('http://localhost:9090/')
 
     def test_query(self):
         result = self._p.query('node_exporter_build_info')

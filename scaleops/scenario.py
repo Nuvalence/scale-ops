@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -43,8 +43,8 @@ def cv(x: pd.Series):
 
 
 def plot_line_scenarios(metric_name: str, axis_name: str,
-                        scenarios: list[Scenario],
-                        metric_results: list[pd.DataFrame],
+                        scenarios: List[Scenario],
+                        metric_results: List[pd.DataFrame],
                         figsize: Tuple[int, int] = None,
                         display_total: Optional[bool] = False,
                         annotate_total: Optional[bool] = False):
@@ -92,8 +92,8 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
 
 
 def plot_cm_scenarios(metric_name: str,
-                      scenarios: list[Scenario],
-                      metric_results: list[pd.DataFrame],
+                      scenarios: List[Scenario],
+                      metric_results: List[pd.DataFrame],
                       display_cm: Optional[bool] = False,
                       display_cv: Optional[bool] = True,
                       figsize: Optional[Tuple[int, int]] = None):
@@ -148,8 +148,8 @@ def plot_cm_scenarios(metric_name: str,
 </div>"""))
 
 
-def scorecard(scenarios: list[Scenario],
-              metric_results: list[pd.DataFrame]) -> pd.DataFrame:
+def scorecard(scenarios: List[Scenario],
+              metric_results: List[pd.DataFrame]) -> pd.DataFrame:
     return pd.concat(
             [m.groupby(['metric_name'], axis=1).sum().agg(cv) for m in
              metric_results],

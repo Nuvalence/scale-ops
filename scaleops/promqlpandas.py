@@ -6,7 +6,7 @@ import pathlib
 import re
 import shutil
 from os.path import exists
-from typing import Any
+from typing import Any, Dict, List
 from typing import Callable
 from typing import Optional
 from typing import Tuple
@@ -35,7 +35,7 @@ class Prometheus:
 
     def __init__(self,
                  api_url: str,
-                 headers: dict = None,
+                 headers: Dict = None,
                  cache_path: pathlib.Path = None):
         """
         Create a Prometheus Client.
@@ -65,10 +65,10 @@ class Prometheus:
 
     def query(self,
               query: str,
-              labels: Optional[dict] = None,
+              labels: Optional[Dict] = None,
               time: Optional[Timestamp] = None,
               timeout: Optional[Duration] = None,
-              sort: Optional[Callable[[dict], Any]] = None) -> Union[
+              sort: Optional[Callable[[Dict], Any]] = None) -> Union[
         Matrix, Vector, Scalar, String]:
         """
         Evaluates an instant query at a single point in time.
@@ -103,9 +103,9 @@ class Prometheus:
                     start: Timestamp,
                     end: Timestamp,
                     step: Duration,
-                    labels: Optional[dict] = None,
+                    labels: Optional[Dict] = None,
                     timeout: Optional[Duration] = None,
-                    sort: Optional[Callable[[dict], Any]] = None,
+                    sort: Optional[Callable[[Dict], Any]] = None,
                     flush_cache: Optional[bool] = False) -> Matrix:
         """
         Evaluates an expression query over a range of time.
@@ -118,6 +118,7 @@ class Prometheus:
         :param labels: A dictionary of labels to add to each set of metric labels
         :param timeout: Evaluation timeout. Optional.
         :param sort: A function passed that generates a sort from a metric dictionary. Optional.
+        :param flush_cache: Flush the query cache before calling.
         """
         epoch_start = to_ts(start)
         epoch_end = to_ts(end)
@@ -163,7 +164,7 @@ class Prometheus:
             )
         return metric_df
 
-    def _do_query(self, path: str, params: dict) -> dict:
+    def _do_query(self, path: str, params: Dict) -> Dict:
         resp = self._http.get(urljoin(self.api_url, path), headers=self.headers,
                               params=params)
         if resp.status_code not in [400, 422, 503]:
@@ -176,10 +177,10 @@ class Prometheus:
         return response['data']
 
     @classmethod
-    def _to_pandas(cls, results: dict, start: float = None, end: float = None,
+    def _to_pandas(cls, results: Dict, start: float = None, end: float = None,
                    step: float = None,
-                   sort: Optional[Callable[[dict], Any]] = None,
-                   labels: dict = None) -> Union[
+                   sort: Optional[Callable[[Dict], Any]] = None,
+                   labels: Dict = None) -> Union[
         Matrix, Vector, Scalar, String]:
         result_type = results['resultType']
 
@@ -203,7 +204,7 @@ class Prometheus:
             raise ValueError('Unknown type: {}'.format(result_type))
 
     @classmethod
-    def _vector_to_numpy(cls, results: dict) -> Tuple[np.ndarray, list]:
+    def _vector_to_numpy(cls, results: dict) -> Tuple[np.ndarray, List]:
         """Take a list of results and turn it into a numpy array."""
 
         # Create the destination array and NaN fill for missing data
@@ -228,7 +229,7 @@ class Prometheus:
     @classmethod
     def _matrix_to_numpy(cls, results: dict, start: float, end: float,
                          step: float) -> Tuple[
-        np.ndarray, list, np.ndarray]:
+        np.ndarray, List, np.ndarray]:
         """Take a list of results and turn it into a numpy array."""
 
         # Calculate the full range of timestamps we want data at. Add a small constant
@@ -262,20 +263,20 @@ class Prometheus:
         return data, metrics, times
 
     @classmethod
-    def _numpy_to_series(cls, data: np.ndarray, metrics: list,
-                         labels: dict = None) -> Vector:
+    def _numpy_to_series(cls, data: np.ndarray, metrics: List,
+                         labels: Dict = None) -> Vector:
         index = cls._metric_index(metrics, labels)
         return pd.Series(data, index=index)
 
     @classmethod
-    def _numpy_to_dataframe(cls, data: np.ndarray, metrics: list,
-                            times: np.ndarray, labels: dict = None) -> Matrix:
+    def _numpy_to_dataframe(cls, data: np.ndarray, metrics: List,
+                            times: np.ndarray, labels: Dict = None) -> Matrix:
         columns = cls._metric_index(metrics, labels)
         index = pd.Index(pd.to_datetime(times, unit='s'), name='timestamp')
         return pd.DataFrame(data.T, columns=columns, index=index)
 
     @classmethod
-    def _metric_index(cls, metrics: list, labels: dict = None) -> pd.MultiIndex:
+    def _metric_index(cls, metrics: List, labels: Dict = None) -> pd.MultiIndex:
         # Merge labels if they exist
         metrics_labels = _merge_metric_labels(metrics, labels)
         # Get the set of all the unique label names
@@ -296,7 +297,7 @@ class Prometheus:
         return index
 
 
-def _merge_metric_labels(metrics: list, labels: dict) -> list:
+def _merge_metric_labels(metrics: List, labels: Dict) -> List:
     if labels:
         return [{**m, **labels} for m in metrics]
 
