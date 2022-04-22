@@ -304,7 +304,7 @@ def _merge_metric_labels(metrics: List, labels: Dict) -> List:
     return metrics
 
 
-def to_ts(ts: Timestamp):
+def to_ts(ts: Timestamp) -> int:
     """Convert a datetime or float to a UNIX timestamp.
 
     Parameters
@@ -322,12 +322,12 @@ def to_ts(ts: Timestamp):
         raise TypeError(f'dt must be a float or datetime. Got {type(ts)}')
 
     if isinstance(ts, float):
-        return ts
+        return int(round(ts))
 
     if isinstance(ts, str):
-        return dtparser.parse(ts).timestamp()
+        return int(round(dtparser.parse(ts).timestamp()))
 
-    return ts.timestamp()
+    return int(round(ts.timestamp()))
 
 
 def duration_to_s(duration: Duration) -> float:
