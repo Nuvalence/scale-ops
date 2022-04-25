@@ -7,9 +7,10 @@ import pandas as pd
 from scaleops.promqlpandas import Prometheus
 
 
-class TestPrometheus(TestCase):
+class TestPrometheusWithK8s(TestCase):
     def setUp(self) -> None:
-        self._p = Prometheus('http://localhost:9090/')
+        self._p = Prometheus('http://localhost:9090/',
+                             k8s_context='local')
 
     def test_query(self):
         result = self._p.query('node_exporter_build_info')
@@ -29,7 +30,7 @@ class TestPrometheus(TestCase):
         result2 = self._p.query_range('rate(node_cpu_seconds_total[5m])',
                                       datetime.now() - timedelta(minutes=30),
                                       datetime.now() - timedelta(minutes=20),
-                                      '1m',
-                                      {'metric_name': 'node_cpu_seconds_total_5m'})
+                                     '1m',
+                                     {'metric_name': 'node_cpu_seconds_total_5m'})
         self.assertIsInstance(result2, pd.DataFrame, 'result2 should be a pandas DataFrame object')
         self.assertIn('metric_name', result2.columns.names)

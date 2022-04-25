@@ -1,6 +1,7 @@
-jupyter
+jupyterlab
 pandas
 numpy
 sympy
 requests
 pyarrow
+kubernetes

@@ -138,7 +138,8 @@ class ContainerScenarioMetricsMixin(ScenarioMetrics):
         kube_container_info_q = f'kube_pod_container_info{{pod=~".*{scenario.pod_part}.*"}}'
         return [MetricResult(kube_container_info_q,
                              self.prometheus.query(kube_container_info_q,
-                                                   time=scenario.end))]
+                                                   time=scenario.end,
+                                                   flush_cache=flush_cache))]
 
     def container_cpu_utilization(self, scenario: Scenario,
                                   flush_cache: bool = False) -> List[
