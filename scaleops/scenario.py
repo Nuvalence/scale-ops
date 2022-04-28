@@ -20,11 +20,26 @@ String = str
 
 class Scenario:
 
-    def __init__(self, pod_part: String, group_part: String, start: Timestamp,
-                 end: Timestamp, step: Duration):
+    def __init__(self,
+                 name: String,
+                 env: String,
+                 pod_part: String,
+                 group_part: String,
+                 start: Timestamp,
+                 end: Timestamp,
+                 step: Duration):
         """
-        :arg step: The step duration for the queries in this scenario.
+        :param name: the name of the Scenario
+        :param env: the name of the environment where the scenario was run.
+        :param pod_part: the string to use in the regex filter a query based on k8s pod name.
+        :param group_part: the string to use in the regex filter a query based on a group name.
+        :param start: the start time in a range query.
+        :param end: the end time a range query.
+        :param step: the step duration of a query.
         """
+
+        self.name = name
+        self.env = env
         self.pod_part = pod_part
         self.group_part = group_part
         self.start = start
@@ -47,13 +62,16 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
                         metric_results: List[pd.DataFrame],
                         figsize: Tuple[int, int] = None,
                         display_total: Optional[bool] = False,
-                        annotate_total: Optional[bool] = False):
+                        annotate_total: Optional[bool] = False,
+                        sharex: Optional[str] = 'none',
+                        sharey: Optional[str] = 'row'):
     col_count = len(scenarios)
     fig, axs = plt.subplots(
             3,
             col_count,
             figsize=(12.8, 9.6) if figsize is None else figsize,
-            sharey='row'
+            sharex=sharex,
+            sharey=sharey
     )
     formatter = ticker.EngFormatter(places=0)
     for i, s in enumerate(scenarios):
@@ -70,7 +88,7 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
                 _label_total(metric_results[i], formatter, axs[2])
             if annotate_total:
                 _annotate_total(metric_results[i], formatter, axs[2])
-            axs[2].set_title(s.pod_part)
+            axs[2].set_title(f'{s.env}/{s.pod_part}')
         else:
             axs[0, i].plot(metric_results[i].iloc[:, [0]])
             axs[0, i].set_title(metric_results[i].iloc[:, [0]].columns[0])
@@ -81,13 +99,14 @@ def plot_line_scenarios(metric_name: str, axis_name: str,
                 _label_total(metric_results[i], formatter, axs[2, i])
             if annotate_total:
                 _annotate_total(metric_results[i], formatter, axs[2, i])
-            axs[2, i].set_title(s.pod_part)
+            axs[2, i].set_title(f'{s.env}/{s.pod_part}')
 
     for ax in axs.flat:
-        ax.set(xlabel=metric_name, ylabel=axis_name)
-
-    for ax in axs.flat:
-        ax.label_outer()
+        if sharey == 'row':
+            ax.label_outer()
+            ax.set(xlabel=metric_name, ylabel=axis_name)
+        else:
+            ax.set(xlabel=metric_name)
         ax.yaxis.set_major_formatter(formatter)
 
 
@@ -130,21 +149,22 @@ def plot_cm_scenarios(metric_name: str,
                     ax=ax,
                     xticklabels=False,
                     yticklabels=False)
-        ax.set_title(f'{s.pod_part} Correlation CV(RMSD): {metric_name}')
+        ax.set_title(f'{s.env}/{s.pod_part} Correlation CV(RMSD): {metric_name}')
 
         if display_cv:
-            cv_a = metric_results[i].groupby(['metric_name'], axis=1).sum().agg(cv).iloc[0]
+            cv_a = metric_results[i].groupby(['metric_name'], axis=1).sum().agg(
+                    cv).iloc[0]
             if cv_a <= 1:
                 display(HTML(f"""<div class="alert alert-block alert-success">
-<b>Low Variance:</b> CV of {metric_name} for {s.pod_part} is <b>{cv_a:.2f}</b>
+<b>Low Variance:</b> CV of {metric_name} for {s.env}/{s.pod_part} is <b>{cv_a:.2f}</b>
 </div>"""))
             elif cv_a < 2.0:
                 display(HTML(f"""<div class="alert alert-block alert-warning">
-<b>High Variance:</b> CV of {metric_name} for {s.pod_part} is <b>{cv_a:.2f}</b>
+<b>High Variance:</b> CV of {metric_name} for {s.env}/{s.pod_part} is <b>{cv_a:.2f}</b>
 </div>"""))
             else:
                 display(HTML(f"""<div class="alert alert-block alert-danger">
-<b>Danger:</b> CV of {metric_name} for {s.pod_part} is <b>{cv_a:.2f}</b>
+<b>Danger:</b> CV of {metric_name} for {s.env}/{s.pod_part} is <b>{cv_a:.2f}</b>
 </div>"""))
 
 
@@ -154,8 +174,8 @@ def scorecard(scenarios: List[Scenario],
             [m.groupby(['metric_name'], axis=1).sum().agg(cv) for m in
              metric_results],
             axis=1,
-            names=['scenario_name'],
-            keys=[s.pod_part for s in scenarios]
+            names=['scenario_env', 'scenario_name'],
+            keys=[(s.env, s.pod_part) for s in scenarios]
     )
 
 
