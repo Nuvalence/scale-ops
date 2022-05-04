@@ -175,7 +175,7 @@ def scorecard(scenarios: List[Scenario],
              metric_results],
             axis=1,
             names=['scenario_env', 'scenario_name'],
-            keys=[(s.env, s.pod_part) for s in scenarios]
+            keys=[(s.env, s.name) for s in scenarios]
     )
 
 
