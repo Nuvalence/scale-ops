@@ -170,12 +170,15 @@ def plot_cm_scenarios(metric_name: str,
 
 def scorecard(scenarios: List[Scenario],
               metric_results: List[pd.DataFrame]) -> pd.DataFrame:
+    keys = []
+    for s in scenarios:
+        keys.append((s.env, s.name))
     return pd.concat(
             [m.groupby(['metric_name'], axis=1).sum().agg(cv) for m in
              metric_results],
             axis=1,
             names=['scenario_env', 'scenario_name'],
-            keys=[(s.env, s.name) for s in scenarios]
+            keys=keys
     )
 
 

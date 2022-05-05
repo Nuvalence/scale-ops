@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import json
 import logging
 import os
 import pathlib
@@ -108,7 +109,8 @@ class Prometheus:
 
         # used for generating filenames for cache
         # noinspection InsecureHash
-        query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()
+        query_hash = hashlib.sha256(
+            json.dumps(params, sort_keys=True).encode('utf-8')).hexdigest()
 
         # don't use a cache if no path is set
         if self._cache_path:
@@ -120,7 +122,7 @@ class Prometheus:
                 if exists(self._cache_path / f'{query_hash}.parquet'):
                     df = pd.read_parquet(
                             self._cache_path / f'{query_hash}.parquet')
-                    return df.loc[:,'0']
+                    return df.loc[:, '0']
             else:
                 os.makedirs(self._cache_path)
 
@@ -177,7 +179,8 @@ class Prometheus:
 
         # used for generating filenames for cache
         # noinspection InsecureHash
-        query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()
+        query_hash = hashlib.sha256(
+            json.dumps(params, sort_keys=True).encode('utf-8')).hexdigest()
 
         # don't use a cache if no path is set
         if self._cache_path:
