@@ -73,10 +73,9 @@ class Prometheus:
     def flush_cache(self) -> None:
         shutil.rmtree(self._cache_path, ignore_errors=True)
 
-    def flush_query_cache(self, query: str) -> None:
+    def flush_query_cache(self, query_hash: Dict) -> None:
         # used for generating filenames for cache
-        # noinspection InsecureHash
-        query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()
+        # noinspection InsecureHash\
         os.remove(self._cache_path / f'{query_hash}.parquet')
 
     def query(self,
@@ -116,7 +115,7 @@ class Prometheus:
         if self._cache_path:
             # if the cache_path was configured, and flush_cache is True
             if flush_cache:
-                self.flush_query_cache(query)
+                self.flush_query_cache(query_hash)
             # if the cache_path was configured, look there first
             if exists(self._cache_path):
                 if exists(self._cache_path / f'{query_hash}.parquet'):
@@ -186,7 +185,7 @@ class Prometheus:
         if self._cache_path:
             # if the cache_path was configured, and flush_cache is True
             if flush_cache:
-                self.flush_query_cache(query)
+                self.flush_query_cache(query_hash)
             # if the cache_path was configured, look there first
             if exists(self._cache_path):
                 if exists(self._cache_path / f'{query_hash}.parquet'):
