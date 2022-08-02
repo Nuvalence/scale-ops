@@ -27,16 +27,16 @@ class Scenario:
     def __init__(self,
                  name: String,
                  env: String,
-                 pod_part: String,
-                 group_part: String,
+                 item_regex: String,
+                 group_regex: String,
                  start: Timestamp,
                  end: Timestamp,
                  step: Duration):
         """
         :param name: the name of the Scenario
         :param env: the name of the environment where the scenario was run.
-        :param pod_part: the string to use in the regex filter a query based on k8s pod name.
-        :param group_part: the string to use in the regex filter a query based on a group name.
+        :param item_regex: the string to use in the regex filter a query based on an item name.
+        :param group_regex: the string to use in the regex filter a query based on a group name.
         :param start: the start time in a range query.
         :param end: the end time a range query.
         :param step: the step duration of a query.
@@ -44,8 +44,8 @@ class Scenario:
 
         self.name = name
         self.env = env
-        self.pod_part = pod_part
-        self.group_part = group_part
+        self.item_regex = item_regex
+        self.group_regex = group_regex
         self.start = start
         self.end = end
         self.step = step
