@@ -43,8 +43,11 @@ class Prometheus:
                  k8s_context: Optional[String] = None):
         """
         Create a Prometheus Client.
+
         :param api_url: The URL to the Prometheus API endpoint.
-        :param headers: Required headers for HTTP requests.
+        :param headers: Required headers for HTTP requests, default None.
+        :param cache_path: Path to cache directory, default None.
+        :param k8s_context: k8s context to use, default None.
         """
         logger.debug(f'Creating prometheus query object for {api_url}')
         self.api_url = api_url

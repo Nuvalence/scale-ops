@@ -134,17 +134,17 @@ timestamp
 
 #### Scrape Duration
 
-| Metric            | Source Measure | Source Type(s)  | Result Type(s) | Description                                 | Join/Aggregate |
-|-------------------|----------------|-----------------|----------------|---------------------------------------------|---------------:|
-| `scrape_duration` | seconds        | counter / guage | gauge          | average scrape duration in seconds over 1m  |        `False` |
+| Metric            | Source Measure | Source Type(s) | Result Type(s) | Description                                 | Join/Aggregate |
+|-------------------|----------------|----------------|----------------|---------------------------------------------|---------------:|
+| `scrape_duration` | seconds        | counter / gauge  | gauge          | average scrape duration in seconds over 1m  |        `False` |
 
 ### [ContainerScenarioMetricsMixin(ScenarioMetrics)](src/scaleops/scenariometrics.py)
 
 #### CPU
 
-| Metric            | Source Measure | Source Type(s)  | Result Type(s) | Description                                           | Join/Aggregate |
-|-------------------|----------------|-----------------|----------------|-------------------------------------------------------|---------------:|
-| `cpu_utilization` | CPU seconds    | counter / guage | gauge          | percent utilization over 1m, normalized to allocation |         `True` |
+| Metric                              | Source Measure | Source Type(s) | Result Type(s) | Description                 | Join/Aggregate |
+|-------------------------------------|----------------|----------------|----------------|-----------------------------|---------------:|
+| `container_cpu_usage_seconds_total` | CPU seconds    | counter        | gauge          | percent utilization over 1m |        `False` |
 
 A very good description of CPU metrics in containers, and how to measure
 them: [here](https://github.com/google/cadvisor/issues/2026#issuecomment-1003120833)
@@ -161,24 +161,24 @@ them: [here](https://github.com/google/cadvisor/issues/2026#issuecomment-1003120
 
 #### Disk - bytes
 
-| Metric                             | Source Measure  | Source Type(s) | Result Type(s)  | Description               | Join/Aggregate |
-|------------------------------------|-----------------|----------------|-----------------|---------------------------|---------------:|
-| `container_fs_reads_bytes_total`   | # bytes read    | counter        | guage           | avg read bytes/sec in 1m  |        `False` |
-| `container_fs_writes_bytes_total`  | # bytes written | counter        | gauge           | avg write bytes/sec in 1m |        `False` |
+| Metric                            | Source Measure  | Source Type(s) | Result Type(s) | Description               | Join/Aggregate |
+|-----------------------------------|-----------------|----------------|----------------|---------------------------|---------------:|
+| `container_fs_reads_bytes_total`  | # bytes read    | counter        | gauge          | avg read bytes/sec in 1m  |        `False` |
+| `container_fs_writes_bytes_total` | # bytes written | counter        | gauge          | avg write bytes/sec in 1m |        `False` |
 
 #### Disk - io
 
-| Metric                             | Source Measure  | Source Type(s) | Result Type(s)  | Description               | Join/Aggregate |
-|------------------------------------|-----------------|----------------|-----------------|---------------------------|---------------:|
-| `container_fs_reads_total`   | # bytes read    | counter        | guage           | avg read bytes/sec in 1m  |        `False` |
-| `container_fs_writes_total`  | # bytes written | counter        | gauge           | avg write bytes/sec in 1m |        `False` |
+| Metric                      | Source Measure  | Source Type(s) | Result Type(s) | Description               | Join/Aggregate |
+|-----------------------------|-----------------|----------------|----------------|---------------------------|---------------:|
+| `container_fs_reads_total`  | # bytes read    | counter        | gauge          | avg read bytes/sec in 1m  |        `False` |
+| `container_fs_writes_total` | # bytes written | counter        | gauge          | avg write bytes/sec in 1m |        `False` |
 
 #### Network - bytes
 
-| Metric                                   | Source Measure  | Source Type(s) | Result Type(s)  | Description               | Join/Aggregate |
-|------------------------------------------|-----------------|----------------|-----------------|---------------------------|---------------:|
-| `container_network_receive_bytes_total`  | # bytes read    | counter        | guage           | avg read bytes/sec in 1m  |        `False` |
-| `container_network_transmit_bytes_total` | # bytes written | counter        | gauge           | avg write bytes/sec in 1m |        `False` |
+| Metric                                   | Source Measure  | Source Type(s) | Result Type(s) | Description               | Join/Aggregate |
+|------------------------------------------|-----------------|----------------|----------------|---------------------------|---------------:|
+| `container_network_receive_bytes_total`  | # bytes read    | counter        | gauge          | avg read bytes/sec in 1m  |        `False` |
+| `container_network_transmit_bytes_total` | # bytes written | counter        | gauge          | avg write bytes/sec in 1m |        `False` |
 
 ### [JvmScenarioMetricsMixin(ScenarioMetrics)](src/scaleops/scenariometrics.py)
 
@@ -186,20 +186,20 @@ them: [here](https://github.com/google/cadvisor/issues/2026#issuecomment-1003120
 
 | Metric                | Source Measure | Source Type(s) | Result Type(s) | Description     | Join/Aggregate |
 |-----------------------|----------------|----------------|----------------|-----------------|---------------:|
-| `jvm_threads_current` | # threads      | guage          | gauge          | # threads in 1m |        `False` |
+| `jvm_threads_current` | # threads      | gauge          | gauge          | # threads in 1m |        `False` |
 
 #### JVM Memory
 
-| Metric                            | Source Measure         | Source Type(s) | Result Type(s)  | Description   | Join/Aggregate |
-|-----------------------------------|------------------------|----------------|-----------------|---------------|---------------:|
-| `jvm_memory_bytes_committed`      | # bytes committed      | guage          | guage           | # bytes in 1m |        `False` |
-| `jvm_memory_bytes_used`           | # bytes used           | guage          | gauge           | # bytes in 1m |        `False` |
-| `jvm_memory_pool_bytes_committed` | # pool bytes committed | guage          | gauge           | # bytes in 1m |        `False` |
-| `jvm_memory_pool_bytes_used`      | # pool bytes used      | guage          | gauge           | # bytes in 1m |        `False` |
+| Metric                            | Source Measure         | Source Type(s) | Result Type(s) | Description   | Join/Aggregate |
+|-----------------------------------|------------------------|----------------|----------------|---------------|---------------:|
+| `jvm_memory_bytes_committed`      | # bytes committed      | gauge          | gauge          | # bytes in 1m |        `False` |
+| `jvm_memory_bytes_used`           | # bytes used           | gauge          | gauge          | # bytes in 1m |        `False` |
+| `jvm_memory_pool_bytes_committed` | # pool bytes committed | gauge          | gauge          | # bytes in 1m |        `False` |
+| `jvm_memory_pool_bytes_used`      | # pool bytes used      | gauge          | gauge          | # bytes in 1m |        `False` |
 
 #### JVM GC Time
 
 | Metric                             | Source Measure   | Source Type(s) | Result Type(s)  | Description               | Join/Aggregate |
 |------------------------------------|------------------|----------------|-----------------|---------------------------|---------------:|
-| `jvm_gc_collection_seconds_sum`    | # seconds in GC  | counter        | guage           | Sum of GC collection time |        `False` |
+| `jvm_gc_collection_seconds_sum`    | # seconds in GC  | counter        | gauge           | Sum of GC collection time |        `False` |
 | `jvm_gc_collection_seconds_count`  | # of times in GC | counter        | gauge           | Count of GC collections   |        `False` |
