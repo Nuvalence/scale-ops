@@ -132,17 +132,18 @@ class Prometheus:
             results = sorted(results, key=lambda r: sort(r['metric']))
 
         metric_series = self._to_pandas(results)
-        metric_df = pd.DataFrame(metric_series)
+        if len(metric_series) > 0:
+            metric_df = pd.DataFrame(metric_series)
 
-        # make sure to write it if we're caching
-        if self._cache_path:
-            if exists(self._cache_path / f'{query_hash}.parquet'):
-                os.remove(self._cache_path / f'{query_hash}.parquet')
-            metric_df.columns = metric_df.columns.astype(str)
-            metric_df.to_parquet(
-                    self._cache_path / f'{query_hash}.parquet',
-                    use_deprecated_int96_timestamps=True
-            )
+            # make sure to write it if we're caching
+            if self._cache_path:
+                if exists(self._cache_path / f'{query_hash}.parquet'):
+                    os.remove(self._cache_path / f'{query_hash}.parquet')
+                metric_df.columns = metric_df.columns.astype(str)
+                metric_df.to_parquet(
+                        self._cache_path / f'{query_hash}.parquet',
+                        use_deprecated_int96_timestamps=True
+                )
         return metric_series
 
     def query_range(self,
@@ -206,7 +207,7 @@ class Prometheus:
         logger.debug(f'Received {len(results)} metrics')
 
         # make sure to write it if we're caching
-        if self._cache_path:
+        if len(metric_df.index) > 0 and self._cache_path:
             if exists(self._cache_path / f'{query_hash}.parquet'):
                 os.remove(self._cache_path / f'{query_hash}.parquet')
             metric_df.to_parquet(
@@ -260,11 +261,15 @@ class Prometheus:
             r = results['result']
 
         if result_type == 'vector':
-            return cls._numpy_to_series(
-                    *cls._vector_to_numpy(r), labels=labels)
+            if len(r) > 0:
+                return cls._numpy_to_series(
+                        *cls._vector_to_numpy(r), labels=labels)
+            return pd.Series()
         elif result_type == 'matrix':
-            return cls._numpy_to_dataframe(
-                    *cls._matrix_to_numpy(r, start, end, step), labels=labels)
+            if len(r) > 0:
+                return cls._numpy_to_dataframe(
+                        *cls._matrix_to_numpy(r, start, end, step), labels=labels)
+            return pd.DataFrame()
         elif result_type == 'scalar':
             return np.float64(r)
         elif result_type == 'string':
