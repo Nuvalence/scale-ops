@@ -33,3 +33,17 @@ class TestPrometheus(TestCase):
                                       {'metric_name': 'node_cpu_seconds_total_5m'})
         self.assertIsInstance(result2, pd.DataFrame, 'result2 should be a pandas DataFrame object')
         self.assertIn('metric_name', result2.columns.names)
+
+    def test_label_values_by_name(self):
+        result = self._p.label_values('job')
+        pprint.pprint(result)
+        pprint.pprint(result.index)
+        self.assertEqual('job', result.name)
+        self.assertIsInstance(result, pd.Series, 'result should be a pandas Series object')
+
+    def test_label_values_by_metric(self):
+        result = self._p.label_values('job', 'jvm_threads_current')
+        pprint.pprint(result)
+        pprint.pprint(result.index)
+        self.assertEqual('job', result.name)
+        self.assertIsInstance(result, pd.Series, 'result should be a pandas Series object')

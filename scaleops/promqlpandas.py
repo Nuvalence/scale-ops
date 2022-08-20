@@ -73,16 +73,38 @@ class Prometheus:
     def __enter__(self):
         return self
 
-    def flush_cache(self) -> None:
-        shutil.rmtree(self._cache_path, ignore_errors=True)
+    def label_values(self,
+                     label: String,
+                     query: Optional[String] = None,
+                     start: Optional[Timestamp] = None,
+                     end: Optional[Timestamp] = None) -> Vector:
 
-    def flush_query_cache(self, query_hash: Dict) -> None:
-        # used for generating filenames for cache
-        # noinspection InsecureHash\
-        os.remove(self._cache_path / f'{query_hash}.parquet')
+        params = {}
+
+        if start:
+            epoch_start = to_ts(start)
+            epoch_end = to_ts(end)
+            params = {
+                'start': epoch_start,
+                'end': epoch_end,
+            }
+        if query:
+            path = 'api/v1/series'
+            params['match[]'] = query
+        else:
+            path = f'api/v1/label/{label}/values'
+
+        results = self._do_query(path, params)
+
+        if query:
+            unique_values = pd.Series([r[label] for r in results]).unique()
+        else:
+            unique_values = pd.Series(np.array(results)).unique()
+
+        return pd.Series(unique_values, name=label)
 
     def query(self,
-              query: str,
+              query: String,
               labels: Optional[Dict] = None,
               time: Optional[Timestamp] = None,
               timeout: Optional[Duration] = None,
@@ -92,13 +114,14 @@ class Prometheus:
         """
         Evaluates an instant query at a single point in time.
 
-        :param labels:
-        :param sort:
+        Uses the `/api/v1/series` endpoint.
+
         :param query: Prometheus expression query string.
         :param labels: A dictionary of labels to add to each set of metric labels. Optional.
         :param time: Evaluation timestamp. Optional.
         :param timeout: Evaluation timeout. Optional.
         :param sort: A function passed that generates a sort from a metric dictionary. Optional.
+        :param flush_cache: Flush the cache before running the query. Optional.
         :return: Pandas DataFrame or Series.
         """
         params = {'query': query}
@@ -109,24 +132,11 @@ class Prometheus:
         if timeout is not None:
             params['timeout'] = duration_to_s(timeout)
 
-        # used for generating filenames for cache
-        # noinspection InsecureHash
-        query_hash = hashlib.sha256(
-            json.dumps(params, sort_keys=True).encode('utf-8')).hexdigest()
+        query_hash = self._query_hash(params)
 
-        # don't use a cache if no path is set
-        if self._cache_path:
-            # if the cache_path was configured, and flush_cache is True
-            if flush_cache:
-                self.flush_query_cache(query_hash)
-            # if the cache_path was configured, look there first
-            if exists(self._cache_path):
-                if exists(self._cache_path / f'{query_hash}.parquet'):
-                    df = pd.read_parquet(
-                            self._cache_path / f'{query_hash}.parquet')
-                    return df.loc[:, '0']
-            else:
-                os.makedirs(self._cache_path)
+        df = self._read_and_return_cache(query_hash, flush_cache)
+        if df:
+            return df.loc[:, '0']
 
         results = self._do_query('api/v1/query', params)
         logger.debug(f'Received {len(results)} metrics')
@@ -134,7 +144,7 @@ class Prometheus:
         if sort:
             results = sorted(results, key=lambda r: sort(r['metric']))
 
-        metric_series = self._to_pandas(results)
+        metric_series = self._to_pandas(results, labels=labels)
         if len(metric_series) > 0:
             metric_df = pd.DataFrame(metric_series)
 
@@ -150,7 +160,7 @@ class Prometheus:
         return metric_series
 
     def query_range(self,
-                    query: str,
+                    query: String,
                     start: Timestamp,
                     end: Timestamp,
                     step: Duration,
@@ -161,7 +171,6 @@ class Prometheus:
         """
         Evaluates an expression query over a range of time.
 
-        :return: Pandas DataFrame.
         :param query: Prometheus expression query string.
         :param start: Start timestamp.
         :param end: End timestamp.
@@ -170,33 +179,26 @@ class Prometheus:
         :param timeout: Evaluation timeout. Optional.
         :param sort: A function passed that generates a sort from a metric dictionary. Optional.
         :param flush_cache: Flush the query cache before calling.
+        :return: Pandas DataFrame.
         """
         epoch_start = to_ts(start)
         epoch_end = to_ts(end)
         step_seconds = duration_to_s(step)
-        params = {'query': query, 'start': epoch_start, 'end': epoch_end,
-                  'step': step_seconds}
+        params = {
+            'query': query,
+            'start': epoch_start,
+            'end': epoch_end,
+            'step': step_seconds
+        }
 
         if timeout is not None:
             params['timeout'] = duration_to_s(timeout)
 
-        # used for generating filenames for cache
-        # noinspection InsecureHash
-        query_hash = hashlib.sha256(
-            json.dumps(params, sort_keys=True).encode('utf-8')).hexdigest()
+        query_hash = self._query_hash(params)
 
-        # don't use a cache if no path is set
-        if self._cache_path:
-            # if the cache_path was configured, and flush_cache is True
-            if flush_cache:
-                self.flush_query_cache(query_hash)
-            # if the cache_path was configured, look there first
-            if exists(self._cache_path):
-                if exists(self._cache_path / f'{query_hash}.parquet'):
-                    return pd.read_parquet(
-                            self._cache_path / f'{query_hash}.parquet')
-            else:
-                os.makedirs(self._cache_path)
+        df = self._read_and_return_cache(query_hash, flush_cache)
+        if df:
+            return df
 
         # get the data
         results = self._do_query('api/v1/query_range', params)
@@ -209,6 +211,10 @@ class Prometheus:
                 labels)
         logger.debug(f'Received {len(results)} metrics')
 
+        self._write_cache(metric_df, query_hash)
+        return metric_df
+
+    def _write_cache(self, metric_df, query_hash):
         # make sure to write it if we're caching
         if len(metric_df.index) > 0 and self._cache_path:
             if exists(self._cache_path / f'{query_hash}.parquet'):
@@ -217,7 +223,14 @@ class Prometheus:
                     self._cache_path / f'{query_hash}.parquet',
                     use_deprecated_int96_timestamps=True
             )
-        return metric_df
+
+    def flush_cache(self) -> None:
+        shutil.rmtree(self._cache_path, ignore_errors=True)
+
+    def flush_query_cache(self, query_hash: String) -> None:
+        # used for generating filenames for cache
+        # noinspection InsecureHash\
+        os.remove(self._cache_path / f'{query_hash}.parquet')
 
     def _do_query(self, path: str, params: Dict) -> Dict:
         if self._k8s_context:
@@ -249,6 +262,31 @@ class Prometheus:
 
         return response['data']
 
+    def _read_and_return_cache(self,
+                               query_hash: String,
+                               flush_cache: Optional[bool] = False) -> Optional[Matrix]:
+        # don't use a cache if no path is set
+        if self._cache_path:
+            # if the cache_path was configured, and flush_cache is True
+            if flush_cache:
+                self.flush_query_cache(query_hash)
+            # if the cache_path was configured, look there first
+            if exists(self._cache_path):
+                if exists(self._cache_path / f'{query_hash}.parquet'):
+                    df = pd.read_parquet(
+                            self._cache_path / f'{query_hash}.parquet')
+                    return df
+            else:
+                os.makedirs(self._cache_path)
+                return None
+
+    @classmethod
+    def _query_hash(cls, params: Dict) -> String:
+        # used for generating filenames for cache
+        # noinspection InsecureHash
+        return hashlib.sha256(
+                json.dumps(params, sort_keys=True).encode('utf-8')).hexdigest()
+
     @classmethod
     def _to_pandas(cls, results: Dict, start: float = None, end: float = None,
                    step: float = None,
@@ -271,7 +309,8 @@ class Prometheus:
         elif result_type == 'matrix':
             if len(r) > 0:
                 return cls._numpy_to_dataframe(
-                        *cls._matrix_to_numpy(r, start, end, step), labels=labels)
+                        *cls._matrix_to_numpy(r, start, end, step),
+                        labels=labels)
             return pd.DataFrame()
         elif result_type == 'scalar':
             return np.float64(r)
