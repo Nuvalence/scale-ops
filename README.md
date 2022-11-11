@@ -71,7 +71,7 @@ data, for the purposes of answering the question of when to scale, and by how mu
 A simple Python module for collecting, analysing, and identifying the performance characteristics of
 a system under test.
 
-### promqlpandas.Prometheus
+### [promql_pandas.Prometheus](scaleops/promql_pandas.py)
 
 Python library for querying [Prometheus](https://prometheus.io/) and accessing the results as
 [Pandas](https://pandas.pydata.org/) data structures. Labels are converted to
@@ -82,10 +82,10 @@ a [MultiIndex](https://pandas.pydata.org/)
 Issuing an instant query at a single point in time produces a Vector as a pandas `Series`:
 
 ```python
-from scaleops.promqlpandas import Prometheus
+from scaleops.promql_pandas import Prometheus
 import time
 
-p = Prometheus('http://demo.robustperception.io:9090/')
+p = Prometheus('http://dev.generic-k8s.io:9090/')
 p.query('node_cpu_seconds_total{mode="system"}', time=time.time())
 ```
 
@@ -101,11 +101,11 @@ And evaluating an aggregate query over a time range produces a Matrix as a panda
 a `TimeseriesIndex` for rows and a `MultiIndex` for columns:
 
 ```python
-from scaleops.promqlpandas import Prometheus
+from scaleops.promql_pandas import Prometheus
 from datetime import timedelta
 import time
 
-p = Prometheus('http://demo.robustperception.io:9090/')
+p = Prometheus('http://dev.generic-k8s.io:9090/')
 p.query_range(
         'sum(rate(node_cpu_seconds_total{mode=~"system|user"}[1m])) by (mode)',
         start=time.time() - timedelta(hours=1).total_seconds(),
@@ -130,76 +130,28 @@ timestamp
 2022-03-23 14:23:46.908718080  0.015198  0.800872
 ```
 
-### [PrometheusScenarioMetricsMixin(ScenarioMetrics)](src/scaleops/scenariometrics.py)  
+### Scenarios, ScenarioSessions, and QueryTemplates
 
-#### Scrape Duration
+* [Scenario](promql_pandas/)
 
-| Metric            | Source Measure | Source Type(s) | Result Type(s) | Description                                 | Join/Aggregate |
-|-------------------|----------------|----------------|----------------|---------------------------------------------|---------------:|
-| `scrape_duration` | seconds        | counter / gauge  | gauge          | average scrape duration in seconds over 1m  |        `False` |
+```python
+from scaleops.scenario import QueryTemplate
 
-### [ContainerScenarioMetricsMixin(ScenarioMetrics)](src/scaleops/scenariometrics.py)
+scrape_query_params = {
+    'job': '.*',
+    'instance': '.*'
+}
 
-#### CPU
-
-| Metric                              | Source Measure | Source Type(s) | Result Type(s) | Description                 | Join/Aggregate |
-|-------------------------------------|----------------|----------------|----------------|-----------------------------|---------------:|
-| `container_cpu_usage_seconds_total` | CPU seconds    | counter        | gauge          | percent utilization over 1m |        `False` |
-
-A very good description of CPU metrics in containers, and how to measure
-them: [here](https://github.com/google/cadvisor/issues/2026#issuecomment-1003120833)
-
-**Definitions**
-
-* `container_cpu_usage_seconds_total` - CPU usage time in **seconds** of a specific container.
-  Using `rate` on this metric will show how many CPU seconds were used per second.
-* `container_spec_cpu_period` - The number of microseconds in a single CPU cycle by a single CPU
-  unit. Typically 100000μs for docker.
-* `container_spec_cpu_quota` - The number of total microseconds per CPU cycle, found by multiplying
-  the number of CPU units by the `container_spec_cpu_period`. Only available if a CPU limit is
-  present.
-
-#### Disk - bytes
-
-| Metric                            | Source Measure  | Source Type(s) | Result Type(s) | Description               | Join/Aggregate |
-|-----------------------------------|-----------------|----------------|----------------|---------------------------|---------------:|
-| `container_fs_reads_bytes_total`  | # bytes read    | counter        | gauge          | avg read bytes/sec in 1m  |        `False` |
-| `container_fs_writes_bytes_total` | # bytes written | counter        | gauge          | avg write bytes/sec in 1m |        `False` |
-
-#### Disk - io
-
-| Metric                      | Source Measure  | Source Type(s) | Result Type(s) | Description               | Join/Aggregate |
-|-----------------------------|-----------------|----------------|----------------|---------------------------|---------------:|
-| `container_fs_reads_total`  | # bytes read    | counter        | gauge          | avg read bytes/sec in 1m  |        `False` |
-| `container_fs_writes_total` | # bytes written | counter        | gauge          | avg write bytes/sec in 1m |        `False` |
-
-#### Network - bytes
-
-| Metric                                   | Source Measure  | Source Type(s) | Result Type(s) | Description               | Join/Aggregate |
-|------------------------------------------|-----------------|----------------|----------------|---------------------------|---------------:|
-| `container_network_receive_bytes_total`  | # bytes read    | counter        | gauge          | avg read bytes/sec in 1m  |        `False` |
-| `container_network_transmit_bytes_total` | # bytes written | counter        | gauge          | avg write bytes/sec in 1m |        `False` |
-
-### [JvmScenarioMetricsMixin(ScenarioMetrics)](src/scaleops/scenariometrics.py)
-
-#### JVM Threads
-
-| Metric                | Source Measure | Source Type(s) | Result Type(s) | Description     | Join/Aggregate |
-|-----------------------|----------------|----------------|----------------|-----------------|---------------:|
-| `jvm_threads_current` | # threads      | gauge          | gauge          | # threads in 1m |        `False` |
-
-#### JVM Memory
-
-| Metric                            | Source Measure         | Source Type(s) | Result Type(s) | Description   | Join/Aggregate |
-|-----------------------------------|------------------------|----------------|----------------|---------------|---------------:|
-| `jvm_memory_bytes_committed`      | # bytes committed      | gauge          | gauge          | # bytes in 1m |        `False` |
-| `jvm_memory_bytes_used`           | # bytes used           | gauge          | gauge          | # bytes in 1m |        `False` |
-| `jvm_memory_pool_bytes_committed` | # pool bytes committed | gauge          | gauge          | # bytes in 1m |        `False` |
-| `jvm_memory_pool_bytes_used`      | # pool bytes used      | gauge          | gauge          | # bytes in 1m |        `False` |
-
-#### JVM GC Time
-
-| Metric                             | Source Measure   | Source Type(s) | Result Type(s)  | Description               | Join/Aggregate |
-|------------------------------------|------------------|----------------|-----------------|---------------------------|---------------:|
-| `jvm_gc_collection_seconds_sum`    | # seconds in GC  | counter        | gauge           | Sum of GC collection time |        `False` |
-| `jvm_gc_collection_seconds_count`  | # of times in GC | counter        | gauge           | Count of GC collections   |        `False` |
+scrape_query_templates = [
+    QueryTemplate('up',
+                  'up{job=~"${job}", instance=~"${instance}"}'),
+    QueryTemplate('scrape_duration_seconds',
+                  'scrape_duration_seconds{job=~"${job}", instance=~"${instance}"}'),
+    QueryTemplate('scrape_samples_post_metric_relabeling',
+                  'scrape_samples_post_metric_relabeling{job=~"${job}", instance=~"${instance}"}'),
+    QueryTemplate('scrape_samples_scraped',
+                  'scrape_samples_scraped{job=~"${job}", instance=~"${instance}"}'),
+    QueryTemplate('scrape_series_added',
+                  'scrape_series_added{job=~"${job}", instance=~"${instance}"}')
+]
+```
