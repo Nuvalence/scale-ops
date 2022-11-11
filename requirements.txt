@@ -4,4 +4,5 @@ numpy
 sympy
 requests
 pyarrow
-kubernetes
+jsonpickle
+fastparquet

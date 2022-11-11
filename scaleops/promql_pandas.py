@@ -1,120 +1,90 @@
 import datetime
-import hashlib
-import json
 import logging
-import os
 import pathlib
 import re
-import shutil
-import socket
-from os.path import exists
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from urllib.parse import urljoin
 
 import numpy as np
 import pandas as pd
 import requests
-import urllib3
 from dateutil import parser as dtparser
-from kubernetes import config
-from kubernetes.client import Configuration
-from kubernetes.client.api import core_v1_api
-from kubernetes.stream import portforward
 
 Timestamp = Union[
     str, float, datetime.datetime]  # RFC-3339 string or as a Unix timestamp in seconds
 Duration = Union[
     str, float, int, datetime.timedelta]  # Prometheus duration string
-Matrix = pd.DataFrame
-Vector = pd.Series
-Scalar = np.float64
-String = str
-
-# Get a logger object
-logger = logging.getLogger(__name__)
 
 
 class Prometheus:
 
     def __init__(self,
-                 api_url: String,
+                 api_url: str,
                  headers: Optional[Dict] = None,
-                 cache_path: Optional[pathlib.Path] = None,
-                 k8s_context: Optional[String] = None):
+                 cache_path: Optional[pathlib.Path] = None):
         """
         Create a Prometheus Client.
 
         :param api_url: The URL to the Prometheus API endpoint.
-        :param headers: Required headers for HTTP requests, default None.
+        :param headers: Required _headers for HTTP requests, default None.
         :param cache_path: Path to cache directory, default None.
-        :param k8s_context: k8s context to use, default None.
         """
-        logger.debug(f'Creating prometheus query object for {api_url}')
-        self.api_url = api_url
-        self.headers = headers
-        self._cache_path = cache_path
-        self._k8s_context = k8s_context
-        if k8s_context:
-            contexts, active_context = config.list_kube_config_contexts()
-            if not contexts:
-                raise RuntimeError(
-                        "No Kubernetes contexts available in ~/.kube/config or $KUBECONFIG")
-            contexts = [context['name'] for context in contexts]
-            if k8s_context not in contexts:
-                raise RuntimeError(
-                        f'k8s_context="{k8s_context}" not found in ~/.kube/config or $KUBECONFIG.')
 
-            config.load_kube_config(context=k8s_context)
-            c = Configuration.get_default_copy()
-            c.assert_hostname = False
-            Configuration.set_default(c)
-            self._core_v1 = core_v1_api.CoreV1Api()
+        # Get a _logger object
+        self._logger = logging.getLogger(__name__)
+        self._logger.debug(f'Creating prometheus query object for {api_url}')
+
+        self._api_url = api_url
+        self._headers = headers
+        self._cache_path = cache_path
 
     def __enter__(self):
         return self
 
     def label_values(self,
-                     label: String,
-                     query: Optional[String] = None,
+                     label: str,
+                     metric: Optional[str] = None,
                      start: Optional[Timestamp] = None,
-                     end: Optional[Timestamp] = None) -> Vector:
+                     end: Optional[Timestamp] = None) -> pd.Series:
 
+        label_series = pd.Series([], dtype=pd.StringDtype())
         params = {}
 
-        if start:
-            epoch_start = to_ts(start)
-            epoch_end = to_ts(end)
-            params = {
-                'start': epoch_start,
-                'end': epoch_end,
-            }
-        if query:
+        if start is not None:
+            params['start'] = to_ts(start)
+        if end is not None:
+            params['end'] = to_ts(end)
+
+        if metric:
             path = 'api/v1/series'
-            params['match[]'] = query
+            params['match[]'] = metric
         else:
             path = f'api/v1/label/{label}/values'
 
         results = self._do_query(path, params)
 
-        if query:
-            unique_values = pd.Series([r[label] for r in results]).unique()
-        else:
-            unique_values = pd.Series(np.array(results)).unique()
+        if len(results) > 0:
+            if metric:
+                unique_values = pd.Series([r[label] for r in results]).unique()
+            else:
+                unique_values = pd.Series(np.array(results)).unique()
+            label_series = pd.Series(unique_values, name=label)
 
-        return pd.Series(unique_values, name=label)
+        self._logger.info(
+                f'Received {len(label_series)} unique label values for (label={label}, metric={metric})')
+        return label_series
 
     def query(self,
-              query: String,
-              labels: Optional[Dict] = None,
+              query: str,
+              labels: Optional[Dict] = {},
               time: Optional[Timestamp] = None,
               timeout: Optional[Duration] = None,
-              sort: Optional[Callable[[Dict], Any]] = None,
-              flush_cache: Optional[bool] = False) -> Union[
-        Matrix, Vector, Scalar, String]:
+              sort: Optional[Callable[[Dict], Any]] = None) -> Union[
+        pd.DataFrame, pd.Series, np.float64, str]:
         """
         Evaluates an instant query at a single point in time.
 
-        Uses the `/api/v1/series` endpoint.
+        Uses the `/api/v1/query` endpoint.
 
         :param query: Prometheus expression query string.
         :param labels: A dictionary of labels to add to each set of metric labels. Optional.
@@ -132,44 +102,36 @@ class Prometheus:
         if timeout is not None:
             params['timeout'] = duration_to_s(timeout)
 
-        query_hash = self._query_hash(params)
-
-        df = self._read_and_return_cache(query_hash, flush_cache)
-        if df:
-            return df.loc[:, '0']
+        for k in params.keys():
+            labels[f'query_{k}'] = params[k]
 
         results = self._do_query('api/v1/query', params)
-        logger.debug(f'Received {len(results)} metrics')
 
         if sort:
             results = sorted(results, key=lambda r: sort(r['metric']))
 
-        metric_series = self._to_pandas(results, labels=labels)
-        if len(metric_series) > 0:
-            metric_df = pd.DataFrame(metric_series)
-
-            # make sure to write it if we're caching
-            if self._cache_path:
-                if exists(self._cache_path / f'{query_hash}.parquet'):
-                    os.remove(self._cache_path / f'{query_hash}.parquet')
-                metric_df.columns = metric_df.columns.astype(str)
-                metric_df.to_parquet(
-                        self._cache_path / f'{query_hash}.parquet',
-                        use_deprecated_int96_timestamps=True
-                )
-        return metric_series
+        metric_result = self._to_pandas(results, labels=labels)
+        if isinstance(metric_result, pd.Series):
+            self._logger.info(
+                    f'Received {len(metric_result)} records for (query={query})')
+        else:
+            self._logger.info(
+                    f'Received {len(metric_result.index)} records for (query={query})')
+        return metric_result
 
     def query_range(self,
-                    query: String,
+                    query: str,
                     start: Timestamp,
                     end: Timestamp,
                     step: Duration,
-                    labels: Optional[Dict] = None,
+                    labels: Optional[Dict] = {},
                     timeout: Optional[Duration] = None,
-                    sort: Optional[Callable[[Dict], Any]] = None,
-                    flush_cache: Optional[bool] = False) -> Matrix:
+                    sort: Optional[
+                        Callable[[Dict], Any]] = None) -> pd.DataFrame:
         """
         Evaluates an expression query over a range of time.
+        
+        Uses the `/api/v1/query_range` endpoint.
 
         :param query: Prometheus expression query string.
         :param start: Start timestamp.
@@ -194,105 +156,44 @@ class Prometheus:
         if timeout is not None:
             params['timeout'] = duration_to_s(timeout)
 
-        query_hash = self._query_hash(params)
-
-        df = self._read_and_return_cache(query_hash, flush_cache)
-        if df:
-            return df
+        for k in params.keys():
+            labels[f'query_{k}'] = f'{params[k]}'
 
         # get the data
         results = self._do_query('api/v1/query_range', params)
-        metric_df = self._to_pandas(
+        metric_result = self._to_pandas(
                 results,
                 epoch_start,
                 epoch_end,
                 step_seconds,
                 sort,
                 labels)
-        logger.debug(f'Received {len(results)} metrics')
 
-        self._write_cache(metric_df, query_hash)
-        return metric_df
-
-    def _write_cache(self, metric_df, query_hash):
-        # make sure to write it if we're caching
-        if len(metric_df.index) > 0 and self._cache_path:
-            if exists(self._cache_path / f'{query_hash}.parquet'):
-                os.remove(self._cache_path / f'{query_hash}.parquet')
-            metric_df.to_parquet(
-                    self._cache_path / f'{query_hash}.parquet',
-                    use_deprecated_int96_timestamps=True
-            )
-
-    def flush_cache(self) -> None:
-        shutil.rmtree(self._cache_path, ignore_errors=True)
-
-    def flush_query_cache(self, query_hash: String) -> None:
-        # used for generating filenames for cache
-        # noinspection InsecureHash\
-        os.remove(self._cache_path / f'{query_hash}.parquet')
+        self._logger.info(
+            f'Received {len(metric_result.index)} records for (query={query}, start={start}, end={end})')
+        return metric_result
 
     def _do_query(self, path: str, params: Dict) -> Dict:
-        if self._k8s_context:
-            # Adapted from https://github.com/kubernetes-client/python/blob/master/examples/pod_portforward.py
-            # Monkey patch the urllib3.util.connection.create_connection function so that
-            # DNS names of the following formats will access kubernetes ports:
-            #
-            #    <pod-name>.<namespace>.kubernetes
-            #    <pod-name>.pod.<namespace>.kubernetes
-            #    <service-name>.svc.<namespace>.kubernetes
-            #    <service-name>.service.<namespace>.kubernetes
-            ##
-            self._urllib3_create_connection = urllib3.util.connection.create_connection
-            urllib3.util.connection.create_connection = self._kubernetes_create_connection
-
         with requests.Session() as http:
-            resp = http.get(urljoin(self.api_url, path),
-                            headers=self.headers,
+            resp = http.get(urljoin(self._api_url, path),
+                            headers=self._headers,
                             params=params)
-        if self._k8s_context:
-            urllib3.util.connection.create_connection = self._urllib3_create_connection
 
         if resp.status_code not in [400, 422, 503]:
             resp.raise_for_status()
 
         response = resp.json()
         if response['status'] != 'success':
-            raise RuntimeError('{errorType}: {error}'.format_map(response))
+            raise RuntimeError(f'{params} error. {response["errorType"]}: {response["error"]}')
 
         return response['data']
-
-    def _read_and_return_cache(self,
-                               query_hash: String,
-                               flush_cache: Optional[bool] = False) -> Optional[Matrix]:
-        # don't use a cache if no path is set
-        if self._cache_path:
-            # if the cache_path was configured, and flush_cache is True
-            if flush_cache:
-                self.flush_query_cache(query_hash)
-            # if the cache_path was configured, look there first
-            if exists(self._cache_path):
-                if exists(self._cache_path / f'{query_hash}.parquet'):
-                    df = pd.read_parquet(
-                            self._cache_path / f'{query_hash}.parquet')
-                    return df
-            else:
-                os.makedirs(self._cache_path)
-                return None
-
-    @classmethod
-    def _query_hash(cls, params: Dict) -> String:
-        # used for generating filenames for cache
-        # noinspection InsecureHash
-        return hashlib.sha256(
-                json.dumps(params, sort_keys=True).encode('utf-8')).hexdigest()
 
     @classmethod
     def _to_pandas(cls, results: Dict, start: float = None, end: float = None,
                    step: float = None,
                    sort: Optional[Callable[[Dict], Any]] = None,
                    labels: Dict = None) -> Union[
-        Matrix, Vector, Scalar, String]:
+        pd.DataFrame, pd.Series, np.float64, str]:
         result_type = results['resultType']
 
         """Convert Prometheus data object to Pandas object."""
@@ -305,7 +206,7 @@ class Prometheus:
             if len(r) > 0:
                 return cls._numpy_to_series(
                         *cls._vector_to_numpy(r), labels=labels)
-            return pd.Series()
+            return pd.Series([], dtype=pd.Float64Dtype())
         elif result_type == 'matrix':
             if len(r) > 0:
                 return cls._numpy_to_dataframe(
@@ -380,13 +281,14 @@ class Prometheus:
 
     @classmethod
     def _numpy_to_series(cls, data: np.ndarray, metrics: List,
-                         labels: Dict = None) -> Vector:
+                         labels: Dict = None) -> pd.Series:
         index = cls._metric_index(metrics, labels)
         return pd.Series(data, index=index)
 
     @classmethod
     def _numpy_to_dataframe(cls, data: np.ndarray, metrics: List,
-                            times: np.ndarray, labels: Dict = None) -> Matrix:
+                            times: np.ndarray,
+                            labels: Dict = None) -> pd.DataFrame:
         columns = cls._metric_index(metrics, labels)
         index = pd.Index(pd.to_datetime(times, unit='s'), name='timestamp')
         return pd.DataFrame(data.T, columns=columns, index=index)
@@ -411,68 +313,6 @@ class Prometheus:
               metrics_labels]
         index = pd.MultiIndex.from_tuples(mt, names=levels)
         return index
-
-    def _kubernetes_create_connection(
-            self,
-            address,
-            timeout=socket.getdefaulttimeout(),
-            source_address=None,
-            socket_options=None,
-    ):
-        dns_name = address[0]
-        if isinstance(dns_name, bytes):
-            dns_name = dns_name.decode()
-        dns_name = dns_name.split(".")
-        if dns_name[-1] != 'kubernetes':
-            return self._urllib3_create_connection(
-                    address,
-                    timeout,
-                    source_address,
-                    socket_options,
-            )
-        if len(dns_name) not in (3, 4):
-            raise RuntimeError("Unexpected kubernetes DNS name.")
-        namespace = dns_name[-2]
-        name = dns_name[0]
-        port = address[1]
-        if len(dns_name) == 4:
-            if dns_name[1] in ('svc', 'service'):
-                service = self._core_v1.read_namespaced_service(name, namespace)
-                for service_port in service.spec.ports:
-                    if service_port.port == port:
-                        port = service_port.target_port
-                        break
-                else:
-                    raise RuntimeError(
-                            "Unable to find service port: %s" % port)
-                label_selector = []
-                for key, value in service.spec.selector.items():
-                    label_selector.append("%s=%s" % (key, value))
-                pods = self._core_v1.list_namespaced_pod(
-                        namespace, label_selector=",".join(label_selector)
-                )
-                if not pods.items:
-                    raise RuntimeError("Unable to find service pods.")
-                name = pods.items[0].metadata.name
-                if isinstance(port, str):
-                    for container in pods.items[0].spec.containers:
-                        for container_port in container.ports:
-                            if container_port.name == port:
-                                port = container_port.container_port
-                                break
-                        else:
-                            continue
-                        break
-                    else:
-                        raise RuntimeError(
-                                "Unable to find service port name: %s" % port)
-            elif dns_name[1] != 'pod':
-                raise RuntimeError(
-                        "Unsupported resource type: %s" %
-                        dns_name[1])
-        pf = portforward(self._core_v1.connect_get_namespaced_pod_portforward,
-                         name, namespace, ports=str(port))
-        return pf.socket(port)
 
 
 def _merge_metric_labels(metrics: List, labels: Dict) -> List:

@@ -3,4 +3,5 @@
 .idea/
 build/
 __pycache__
+__promql_pandas_cache__
 *.egg-info
