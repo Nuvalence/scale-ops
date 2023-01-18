@@ -1,6 +1,8 @@
 import logging
 import os
-import subprocess
+import re
+import shlex, subprocess
+import tempfile
 import time
 from contextlib import ContextDecorator
 from logging import Logger
@@ -67,14 +69,16 @@ class ShellKubePortForwarder(ContextDecorator):
                     f'port-forwarding to {forward_type} {forward_name} with ports 9090:{self._port}'
             )
 
-            self._p = ShellKubePortForwarder._get_portforward_proc(
+            try:
+                (self._p, _) = ShellKubePortForwarder._get_portforward_proc(
                     self._namespace,
                     forward_name,
                     self._port,
                     self._shell_env,
-                    self._sleep,
-                    self._logger.level == logging.DEBUG
-            )
+                )
+            except subprocess.CalledProcessError as cpe:
+                self._logger.error(f'Command `{cpe.cmd}` failed with status {cpe.returncode} and stderr:\n{cpe.stderr}')
+                raise with_refined_feedback(cpe)
 
     def stop(self):
         if self._p:
@@ -101,47 +105,95 @@ class ShellKubePortForwarder(ContextDecorator):
             self._p = None
 
     @staticmethod
-    def _get_portforward_proc(namespace, name, port, shell_env, sleep,
-                              show_output):
-        cmd = f'kubectl port-forward --namespace {namespace} {name} 9090:{port}'
+    def _get_portforward_proc(namespace, name, port, shell_env, stdout=None, stderr=None, host_port=9090, timeout=10):
+        """
+        Spawn a process for port forwarding.
+
+        This returns a tuple of (process, host_port) - only the first is relevant at the moment but it seemed worth adding the
+        second while messing with relevant code.
+        Passing an empty host_port allows the kernel to select an available port (and therefore returning it is useful).
+
+        This is different than the others since background process/job management is not supported by the
+        higher level ``subprocess`` functions.
+
+        This can be passed file handles of ``stdout`` and optionally ``stderr`` (defaults to reusing ``stdout``)
+        to which outputs will be redirected. These outputs will then be polled to detect errors or success.
+        Relying on tempfile should allow the files to be cleaned up when it is no longer referenced,
+        but otherwise this should be owned by something more aligned with the lifecycle.
+        """
+        if (not stdout):
+            stdout = tempfile.TemporaryFile()
+        if (not stderr):
+            stderr = stdout
+        cmd = f'kubectl port-forward --namespace {namespace} {name} {host_port}:{port}'
         p = subprocess.Popen(
-                cmd.split(),
-                env=shell_env,
-                stdout=subprocess.PIPE if show_output else subprocess.DEVNULL,
-                stderr=subprocess.PIPE if show_output else subprocess.DEVNULL
+            shlex.split(cmd),
+            env=shell_env,
+            stderr=stdout,
+            stdout=stderr,
+            text=True,
         )
-        time.sleep(sleep)
-        return p
+        # Define output which indicates forwarding is ready.
+        success_output = re.compile("Forwarding from 127\.0\.0\.1:(\d+)")
+        for _ in range(timeout):
+            # Mind the location as we consume from handles.
+            stdout.seek(0)
+
+            # There's some stringification stuff in here which would likely be better handled by preferring the
+            # buffers, but this seems reasonable given the use.
+
+            # If the process has completed it indicates failure, so surface relevant information.
+            if (p.poll()):
+                error_stdout = f'{stdout.read()}'
+                error_stderr = error_stdout if stderr == stdout else f'{stderr.read()}'
+                raise subprocess.CalledProcessError(p.returncode, cmd, error_stdout, error_stderr)
+
+            # If success message has been output to file return process and captured host port.
+            forwarding = success_output.search(f'{stdout.read()}')
+            if (forwarding):
+                return (p, forwarding.group(1))
+            time.sleep(1)
+        raise RuntimeError(f'Call to {cmd} did not complete in {timeout} seconds.')
 
     @staticmethod
     def _get_pod_name_by_prefix(shell_env, prefix):
         return subprocess.run(
-                f"kubectl get pods --namespace monitoring | grep {prefix} | head -n 1 | awk '{{ print $1 }}'",
-                check=True,
-                shell=True,
-                capture_output=True,
-                text=True,
-                env=shell_env
-        )
+            f"kubectl get pods --namespace monitoring | grep {prefix} | head -n 1 | awk '{{ print $1 }}'",
+            **with_default_process_args(env=shell_env))
 
     @staticmethod
     def _get_current_context(shell_env):
         return subprocess.run(
-                'kubectx -c',
-                check=True,
-                shell=True,
-                capture_output=True,
-                text=True,
-                env=shell_env
-        )
+            'kubectx -c',
+            **with_default_process_args(env=shell_env))
 
     @staticmethod
     def _change_context(context, shell_env):
-        return subprocess.run(
-                args=f'kubectx {context}',
-                check=True,
-                shell=True,
-                capture_output=True,
-                text=True,
-                env=shell_env
-        )
+        return subprocess.run(**with_default_process_args(
+            args=f'kubectx {context}',
+            env=shell_env))
+
+def with_default_process_args(**kwargs):
+    """
+    Provide local default parameters for subprocesses.
+    This can be called with keyword argument overrides
+    and should be unpacked into the underlying ``subprocess`` call such as::
+    **with_default_process_args(my_override: 'Foo')
+    """
+    return {
+        'check': True,
+        'shell': True,
+        'capture_output': True,
+        'text': True,
+        **kwargs,
+    }
+
+def with_refined_feedback(cpe: subprocess.CalledProcessError):
+    """
+    Attempt to provide better a more helpful error based on output.
+    This can/should be refiend as neeeded.
+    """
+    if ('MFA' in cpe.stderr):
+        return Exception('Refresh your MFA or SSO session outside of this program!')
+    return cpe
+
